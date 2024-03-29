@@ -16,7 +16,7 @@ class Conversation():
             }
 
         self.retriever_kwargs = retriever_kwargs
-        self.conversation = self.get_conversation_chain()
+        self.conversation_chain = self.get_conversation_chain()
 
     def get_conversation_chain(self):
 
@@ -54,6 +54,14 @@ class Conversation():
         return conversation_chain
     
     def call():
+        query = {
+
+            "question" : question,
+
+        }
+
+        return self.conversation_chain({**query})
+    
         
         
         
