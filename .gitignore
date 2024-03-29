@@ -1,3 +1,6 @@
 .venv
 .env
-.db/*.*
+db/*
+chroma.log
+record_manager_cache.sql
+archivos/*
