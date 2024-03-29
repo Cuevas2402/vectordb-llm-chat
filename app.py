@@ -1,4 +1,6 @@
 import streamlit as st
+
+from typing import *
 import chromadb
 import os
 
@@ -12,6 +14,11 @@ from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain, ConversationalRetrievalChain
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.chat_models import ChatOpenAI
+from langchain_openai import OpenAI
+from langchain.memory import ConversationBufferMemory
+
 
 ######## Inicio seccion para cargar archivos ########
 
@@ -42,7 +49,7 @@ def get_record_manager():
 
 def load_docs():
 
-    loader = DirectoryLoader('./pdfs/', glob="./*.pdf", loader_cls=PyPDFLoader)
+    loader = DirectoryLoader('./archivos/', glob="./*.pdf", loader_cls=PyPDFLoader)
     docs = loader.load()
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1024, chunk_overlap=200)
@@ -64,18 +71,18 @@ def insert_docs(record_manager, vector_db, docs):
     return log
 
 def clean_dir():
-    directorio = "./pdfs/"
+    directorio = "./archivos/"
     for archivo in os.listdir(directorio):
         ruta = os.path.join(directorio, archivo)
-        if os.path.isfile(ruta_completa):
-            os.remove(ruta_completa)
+        if os.path.isfile(ruta):
+            os.remove(ruta)
     
 
 def load_info():
     
     db_client = chromadb.HttpClient(host="localhost", port=8000)
     
-    if len(db.list_collections()) == 0:
+    if len(db_client.list_collections()) == 0:
 
         create_record_manager()
         db_client.create_collection("langchain")
@@ -85,12 +92,12 @@ def load_info():
     
     docs = load_docs()
     
-    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-base")
     
     vector_db = Chroma(
         client=db_client,
         collection_name="langchain",
-        embedding_function=embedding,
+        embedding_function=embeddings,
     )
 
     log = insert_docs(record_manager, vector_db, docs)
@@ -115,35 +122,36 @@ def save_files(archivos):
 
 def get_conversation_chain():
 
-    llm = OpenAI()
-    
-    # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
+    llm = OpenAI(temperature=0.5)
 
-    template = '''
+    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-base")
 
+    db_client = chromadb.HttpClient(host="localhost", port=8000)
+
+    vector_db = Chroma(
+        client=db_client,
+        collection_name="langchain",
+        embedding_function=embeddings,
+    )
+
+    TEMPLATE = '''
+        {context}
         Historial del chat : {chat_history}
         
         Descripción del problema o pregunta de programación:
 
-        {query}
+        {question}
         
-        Ejemplo de código relacionado o contexto adicional (opcional):
-
-        {code}
-
         Instruccion para el modelo:
 
         Por favor, proporciona orientación y sugerencias para abordar el problema, pero evita dar soluciones directas o código completo. Me gustaría entender el enfoque y las técnicas para resolver el problema en lugar de obtener una solución final.
     
     '''
 
-    prompt = PromptTemplate.from_template(template)
-
-    chain = LLMChain(llm = llm, prompt = prompt)
-
+    CUSTOM_PROMPT = PromptTemplate(input_variables=["context","chat_history", "question"] , template = TEMPLATE)
 
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
-    
+
     retriever = vector_db.as_retriever(
         search_type="similarity_score_threshold", 
         search_kwargs={
@@ -153,30 +161,27 @@ def get_conversation_chain():
     )
 
     conversation_chain = ConversationalRetrievalChain.from_llm(
-        question_generator=chain,
+        llm=llm,
         retriever=retriever,
-        memory=memory
+        memory=memory,
+        combine_docs_chain_kwargs={ "prompt": CUSTOM_PROMPT}
     )
-    
+  
     return conversation_chain
 
-def handle_userinput(user_input):
+def handle_userinput(question):
+    
+    query = {
+        "question" : question,
+    } 
     response = st.session_state.conversation(
-        {
-            'query': user_question['query'],
-            'code' : user_question['code'] if user_question['code'] else ""
-        }
+        {**query}
     )
-
-    st.session_state.chat_history = response['chat_history']
-
-    for i, message in enumerate(st.session_state.chat_history):
-        if i % 2 == 0:
-            message = st.chat_message("user")
-            message.write(message)
-        else:
-            message = st.chat_message("assistant")
-            message.write(message)
+    print(response)
+    message = st.chat_message("user")
+    message.write(response["question"])
+    message = st.chat_message("assistant")
+    message.write(response["answer"])
 
 ######## Fin seccion para conversacion ############
 
@@ -185,24 +190,20 @@ def  main():
     st.set_page_config(page_title="Chat", page_icon=":books:")
 
     if "conversation" not in st.session_state:
-        st.session_state.conversation = None
+        st.session_state.conversation = None 
 
     if "chat_history" not in st.session_state:
-        st.session_state.chat_history = None
+        st.session_state.chat_history = None 
     
     st.header("Chat")
     
-    col1, col2 = st.columns(2)
-    user_question = {}
-    with col1:
-        user_question["query"] = st.text_input("Ingresa tu pregunta")
-    with col2:
-        user_question["code"] = st.text_input("Ingresa el codigo (Opcional)")
+    query = st.text_input("Ingresa tu pregunta")
     ask = st.button("Submit", type = "primary")
 
-    if ask:
+    if ask and query:
         with st.spinner("Processing"):
-            handle_userinput(user_question)
+            handle_userinput(query)
+            
 
     with st.sidebar:
         st.subheader("Documentos")
@@ -210,7 +211,9 @@ def  main():
         if st.button("Cargar documentos"):
             with st.spinner("Processing"):
                 save_files(pdf_docs)
-                load_info()
+                msg = load_info()
+                st.session_state.conversation = get_conversation_chain()
+                print(msg)
 
                 
 if __name__ == '__main__':
