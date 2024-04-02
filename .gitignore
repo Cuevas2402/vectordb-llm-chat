@@ -4,3 +4,4 @@ db/*
 chroma.log
 record_manager_cache.sql
 archivos/*
+utils/__pycache__
