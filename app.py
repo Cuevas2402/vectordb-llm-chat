@@ -6,18 +6,11 @@ import os
 
 from dotenv import load_dotenv
 
-#Langchain
 from langchain_openai import OpenAI
 
 from utils  import Conversation, VectorDB
 
-
 ######## Inicio seccion para cargar archivos ########
-
-
-# 1. Extraer informacion
-# 2. Convertilar a documentos de langchain
-# 3. Si no existe un record manager crearlo
         
 def save_files(archivos):
     directorio = "./archivos/"
@@ -71,7 +64,7 @@ def  main():
         st.session_state.chat_history = None 
 
     if "db" not in st.session_state:
-        st.session_state.db = VectorDB()
+        st.session_state.db = VectorDB(namespace = "chromadb/langchain", db_url="sqlite:///record_manager_cache.sql", directory = './archivos/', collection = "langchain" )
     
     st.header("Chat")
     
@@ -89,9 +82,7 @@ def  main():
         if st.button("Cargar documentos"):
             with st.spinner("Processing"):
                 save_files(pdf_docs)
-                msg = load_info()
-                st.session_state.conversation = get_conversation_chain()
-                print(msg)
+                msg = st.session_state.db.load_info()
 
                 
 if __name__ == '__main__':
