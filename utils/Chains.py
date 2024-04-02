@@ -1,5 +1,7 @@
+from langchain_core.prompts import PromptTemplate
+from langchain.chains import LLMChain, ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 
-        
 class Conversation():
     
     def __init__(self, llm, vector_db, retriever_kwargs = None ):
@@ -16,6 +18,7 @@ class Conversation():
             }
 
         self.retriever_kwargs = retriever_kwargs
+        self.history = []
         self.conversation_chain = self.get_conversation_chain()
 
     def get_conversation_chain(self):
@@ -38,10 +41,10 @@ class Conversation():
 
         CUSTOM_PROMPT = PromptTemplate(input_variables=["context","chat_history", "question"] , template = TEMPLATE)
 
-        memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
+        memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, k = 2 )
         
         retriever = self.vector_db.as_retriever(
-            ****self.retriever_kwargs
+            **self.retriever_kwargs
         )
 
         conversation_chain = ConversationalRetrievalChain.from_llm(
@@ -53,7 +56,8 @@ class Conversation():
     
         return conversation_chain
     
-    def call():
+    def call(self, question):
+
         query = {
 
             "question" : question,

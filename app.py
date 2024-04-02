@@ -17,7 +17,8 @@ from langchain.chains import LLMChain, ConversationalRetrievalChain
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chat_models import ChatOpenAI
 from langchain_openai import OpenAI
-from langchain.memory import ConversationBufferMemory
+
+from utils  import Conversation
 
 
 ######## Inicio seccion para cargar archivos ########
@@ -134,49 +135,13 @@ def get_conversation_chain():
         embedding_function=embeddings,
     )
 
-    TEMPLATE = '''
-        {context}
-        Historial del chat : {chat_history}
-        
-        Descripción del problema o pregunta de programación:
-
-        {question}
-        
-        Instruccion para el modelo:
-
-        Por favor, proporciona orientación y sugerencias para abordar el problema, pero evita dar soluciones directas o código completo. Me gustaría entender el enfoque y las técnicas para resolver el problema en lugar de obtener una solución final.
-    
-    '''
-
-    CUSTOM_PROMPT = PromptTemplate(input_variables=["context","chat_history", "question"] , template = TEMPLATE)
-
-    memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
-
-    retriever = vector_db.as_retriever(
-        search_type="similarity_score_threshold", 
-        search_kwargs={
-                "score_threshold": 0.5,
-                "k":2
-            }
-    )
-
-    conversation_chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=retriever,
-        memory=memory,
-        combine_docs_chain_kwargs={ "prompt": CUSTOM_PROMPT}
-    )
+    converasation = Conversation(llm , vector_db) 
   
-    return conversation_chain
+    return converasation 
 
 def handle_userinput(question):
     
-    query = {
-        "question" : question,
-    } 
-    response = st.session_state.conversation(
-        {**query}
-    )
+    response = st.session_state.conversation.call(question)
     print(response)
     message = st.chat_message("user")
     message.write(response["question"])
